@@ -1,0 +1,214 @@
+#!/bin/bash
+#######################################################################
+##                             CONFIG                                ##
+#######################################################################
+trinity="/home/source/TrinityCore"
+commit="/home/source/updates"
+buildplace="/home/source/build"
+log="/home/source/TrinityCore/git.log"
+sql="/home/source/2/sql/updates/world"
+sql2="/home/server/source/4.x/sql/updates/world"
+sqluser=""
+sqlpass=""
+requiredir="/var/log/TrinityCore"
+#######################################################################
+##                           END-CONFIG                              ##
+#######################################################################
+#Uncomment if you want it to clear your screen when running.
+#clear
+export d=`date +%F`
+export z=`date +%F_%I:%M`
+echo "####################################################################"
+echo "#                                                                  #"
+echo "#               TrinityCore Core and Database Updater              #"
+echo "#                                                                  #"
+echo "####################################################################"
+echo ""
+echo ""
+echo "Logs are saved too: $requiredir "
+echo "Select a Option: "
+echo "1 - Just Core Update"
+echo "2 - Just Database Update+backup"
+echo "3 - Full Update (both+backup)"
+echo "4 - Backup Database only"
+read -p  "Select: " option
+
+#function to have you press enter to go on.
+function pause(){
+        read -p "$*"
+}
+
+#checking for logging folder if not found will create
+if [ ! -d "$requiredir" ]; then
+	sudo mkdir $requiredir
+fi
+
+#will create a folder with the date and all the log files.
+if [ ! -d "$requiredir/$d" ]; then
+	echo "Making $requiredir/$d now"
+	sudo mkdir $requiredir/$d
+        touch $requiredir/$d/git.log
+        touch $requiredir/$d/Make.log
+        touch $requiredir/$d/make_install.log
+        touch $requiredir/$d/make_clean.log
+fi
+
+#the first option will do a update without a database backup or update
+if [ $option == '1' ]; then
+	read -p "main or commit: " selection
+	if [ $selection == 'main' ]; then
+	        pause "Going to Update Core."
+	        cd $trinity
+	        sudo git pull -u > git.log | tee -a $requiredir/$d/git.log
+	        GIT_PULL=`cat git.log`
+	        UPDATE="Already up-to-date."
+       		if [ "$GIT_PULL" == "Already up-to-date." ]; then
+                	echo "Already Updated!"
+       		else
+                	cat $log
+                	pause "Going to Make clean and make."
+                	cd $buildplace
+                	sudo make clean | tee -a $requiredir/$d/make_clean.log
+                	sudo make | tee -a $requiredir/$d/Make.log
+                	pause "Making Install"
+                	sudo make install | tee -a $requiredir/$d/make_install.log
+                	sudo rm $log
+                	pause "Completed look for errors and then push ENTER"
+                	clear
+		fi
+        elif [ $selection == 'commit' ]; then
+                read -p "What is the commit hash: " hash
+                wget https://nodeload.github.com/TrinityCore/TrinityCore/zipball/$hash -O $commit/`date +%F`.zip
+                cd $commit
+                unzip -qd $commit/temp/ `date +%F`.zip
+                cp -R $commit/temp/Trinity*/* $trinity
+                cd $buildplace
+                pause "Going to Make clean and make."
+                cd $buildplace
+                sudo make clean | tee -a $requiredir/$d/make_clean.log
+                sudo make | tee -a $requiredir/$d/Make.log
+                pause "Making Install"
+                sudo make install | tee -a $requiredir/$d/make_install.log
+                sudo rm $log
+                pause "Completed look for errors and then push ENTER"
+                clear
+        fi
+fi
+
+#option 2 will do a database backup
+if [ $option == "2" ]; then
+        pause "Backing up auth, world, and characters"
+        sudo mkdir -p /backup/$d /backup/$d/TW_auth /backup/$d/TW_world /backup/$d/TW_characters
+        for i in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_auth|grep -v Tables_in_`;
+        do
+		echo $i
+                sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_auth $i > /backup/$d/TW_auth/$i.sql
+                sudo rm -f /backup/$d/TW_auth/$i.sql.gz
+                sudo gzip /backup/$d/TW_auth/$i.sql
+        done
+
+        for c in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_characters|grep -v Tables_in_`;
+        do
+		echo $c
+                sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_characters $c > /backup/$d/TW_characters/$c.sql
+                sudo rm -f /backup/$d/TW_characters/$c.sql.gz
+                sudo gzip /backup/$d/TW_characters/$c.sql
+        done
+
+        for w in `echo "show tables" | sudo mysql -u $sqluser  --password=$sqlpass TW_world|grep -v Tables_in_`;
+        do
+		echo $w
+                sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_world $w > /backup/$d/TW_world/$w.sql
+                sudo rm -f /backup/$d/TW_world/$w.sql.gz
+                sudo gzip /backup/$d/TW_world/$w.sql
+        done
+        pause "Going to Update Database "
+        cd $sql
+        for i in `ls *_world_*.sql`; do echo $i && mysql --user=$sqluser --password=$sqlpass TW_world < $i; done
+
+fi
+
+#option 3 and probably the most used. Will update the server and sql as well as backup.
+if [ $option == '3' ]; then
+        read -p "main or commit: " selection
+        if [ $selection == 'main' ]; then
+	        pause "Going to Update Core."
+	        cd $trinity
+	        sudo git pull -u > git.log | tee -a $requiredir/$d/git.log
+	        sudo cat git.log > $requiredir/$d/git.log
+	        GIT_PULL=`cat git.log`
+	        UPDATE="Already up-to-date."
+	        if [ "$GIT_PULL" == "Already up-to-date." ]; then
+	                echo "Already Updated!"
+	        else
+	                cat $log
+			pause "Going to Make clean and makend Database Updater."
+			cd $buildplace
+			sudo make clean | tee -a $requiredir/$d/make_clean.log
+	                sudo make | tee -a $requiredir/$d/Make.log
+			pause "Making Install"
+	                sudo make install | tee -a $requiredir/$d/make_install.log
+	                sudo rm $log
+       	        	pause "Completed look for errors and then push ENTER"
+                	clear
+		fi
+        elif [ $selection == 'commit' ]; then
+                read -p "What is the commit hash: " hash
+                wget https://nodeload.github.com/TrinityCore/TrinityCore/zipball/$hash -O $commit/$hash.zip
+                cd $commit
+                unzip -qd $commit/temp/ $hash.zip
+		if [ ! -d "$trinity" ]; then
+			echo "Creating $trinity"
+			mkdir $trinity
+		else
+			rm -R $trinity/*
+		fi
+                cp -R $commit/temp/Trinity*/* $trinity/
+                cd $buildplace
+                pause "Going to Make clean and make."
+                cd $buildplace
+                sudo make clean | tee -a $requiredir/$d/make_clean.log
+                sudo make | tee -a $requiredir/$d/Make.log
+                pause "Making Install"
+                sudo make install | tee -a $requiredir/$d/make_install.log
+                sudo rm $log
+                pause "Completed look for errors and then push ENTER"
+                clear
+	fi
+        pause "Going to Backup Database"
+        sudo mkdir -p /backup/$z /backup/$z/TW_world
+        for w in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_world|grep -v Tables_in_`;
+        do
+                sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_world $w > /backup/$d/TW_world/$w.sql
+                sudo rm -f /backup/$d/TW_world/$w.sql.gz
+                sudo gzip /backup/$d/TW_world/$w.sql
+        done
+	pause "Going to Update Database"
+        cd $sql
+        for i in `ls *_world_*.sql`; do mysql --user=$sqluser --password=$sqlpass TW_world < $i; done
+fi
+
+#option 4. Only backup and update the database
+if [ $option == '4' ]; then
+        sudo mkdir -p /backup/$d /backup/$d/TW_auth /backup/$d/TW_world /backup/$d/TW_characters
+        for i in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_auth|grep -v Tables_in_`;
+        do
+                echo $i; sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_auth $i > /backup/$d/TW_auth/$i.sql
+                sudo rm -f /backup/$d/TW_auth/$i.sql.gz
+                sudo gzip /backup/$d/TW_auth/$i.sql
+        done
+
+        for c in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_characters|grep -v Tables_in_`;
+        do
+                echo $c; sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_characters $c > /backup/$d/TW_characters/$c.sql
+		sudo rm -f /backup/$d/TW_characters/$c.sql.gz
+                sudo gzip /backup/$d/TW_characters/$c.sql
+        done
+
+        for w in `echo "show tables" | sudo mysql -u $sqluser --password=$sqlpass TW_world|grep -v Tables_in_`;
+        do
+                echo $w; sudo mysqldump --allow-keywords -q -a -c -u $sqluser --password=$sqlpass TW_world $w > /backup/$d/TW_world/$w.sql
+                sudo rm -f /backup/$d/TW_world/$w.sql.gz
+                sudo gzip /backup/$d/TW_world/$w.sql
+        done
+fi

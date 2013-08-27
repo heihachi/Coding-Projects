@@ -1,0 +1,84 @@
+#!/bin/bash
+ 
+######################
+GDB_ENABLED=1
+GDB="trinity.gdb"
+WORLDSERVER="/WoW/TW/bin/world.pid" ### Put here the pid you configured on your worldserver.conf file ###
+AUTHSERVER="/WoW/TW/bin/auth.pid"   ### Put here the pid you configured on your authserver.conf file ###
+ 
+### If you want to have more realms runing, just uncoment or copy this line ###
+#EXTRAWORLDSERVER="/WoW/4.x/bin/world.pid" ### Put here the pid you configured on your worldserver.conf file ###
+ 
+ 
+WORLD_CONFIG="../etc/worldserver.conf"
+REALM_CONFIG="../etc/authserver.conf"
+ 
+### If you want to have more realms runing, just uncoment or copy this line ###
+#EXTRAWORLD_CONFIG="/WoW/4.x/etc/worldserver.conf"
+ 
+WORLD_SCREEN_NAME="world"
+REALM_SCREEN_NAME="realm"
+ 
+### If you want to have more realms runing, just uncoment or copy this line ###
+#EXTRAWORLD_SCREEN_NAME="cata"
+ 
+ 
+TRACE_BEGIN_STRING="SIGSEGV"
+TRACE_FILE="../logs/trace.log"
+ERR_FILE="../logs/error.log"
+SYSLOG="../logs/system.log"
+SYSLOGEXTRA="../logs/system_extra.log"
+SYSERR="../logs/system.err"
+SYSERREXTRA="../logs/system_extra.err"
+LINKS_FILE="../logs/crash_links.link"
+RESTARTLOG="../logs/restarts.log"
+######################
+ 
+function checkStatus() {
+        if [ -d "/proc/"$1 ]; then
+                eval "TEST=1"
+        else
+                eval "TEST=0"
+        fi
+}
+ 
+while :
+do
+        PID=$(cat $WORLDSERVER)
+        checkStatus $PID
+        if [ $TEST -eq 0 ]; then
+                DATE=$(date)
+                echo "Restarting Trinity Core blizz($DATE)"
+		echo "Restarting Trinity Core blizz($DATE)" >> $RESTARTLOG
+                if [ $GDB_ENABLED -eq 1 ]; then
+                        grep -B 10 -A 1800 "$TRACE_BEGIN_STRING" "$SYSLOG" >> "$TRACE_FILE"
+            echo "------------------`date +%Y-%m-%d-%H-%M-%S`------------------" >> "$TRACE_FILE"
+                        cat "$TRACE_FILE" | grep "http" >> "$LINKS_FILE"
+                        cat "$SYSERR" > "$ERR_FILE"
+                        sudo screen -A -m -d -S $WORLD_SCREEN_NAME ./start worldserver $GDB "$WORLD_CONFIG" "$SYSLOG" "$SYSERR" 1
+                fi
+                
+                if [ $GDB_ENABLED -eq 0 ]; then
+                        sudo screen -A -m -d -S $WORLD_SCREEN_NAME ./start worldserver null "$WORLD_CONFIG" null null 0
+                fi
+        fi
+ 
+### If you want to have more realms runing, just uncoment or copy those lines ###
+#	PID=$(cat $EXTRAWORLDSERVER)
+#	checkStatus $PID
+#	if [ $TEST -eq 0 ]; then
+#		DATE=$(date)
+#		echo "Restarting Second Core blizz($DATE)"
+#		echo "Restarting Second Core blizz($DATE)" >> $RESTARTLOG
+#                        screen -A -m -d -S $EXTRAWORLD_SCREEN_NAME ./start worldserver null "$EXTRAWORLD_CONFIG" "$SYSLOGEXTRA" "$SYSERREXTRA" 1
+#        fi
+        
+        PID=$(cat "$AUTHSERVER")
+        checkStatus $PID
+        if [ $TEST -eq 0 ]; then
+                DATE=$(date)
+                echo "Restarting Trinity Realm ($DATE)"
+                sudo screen -A -m -d -S $REALM_SCREEN_NAME ./start authserver null "$REALM_CONFIG"
+        fi
+        sleep 45
+done

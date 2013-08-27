@@ -1,0 +1,4 @@
+#!/bin/bash
+export z=`date +%F_%I:%M`
+sudo screen -A -m -d -S $1 $2 | tee -a /var/log/screens/$z
+screen -ls
